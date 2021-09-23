@@ -9,101 +9,12 @@ a.	Luckily, we only start with 1 fact: Order. Other facts can be ignored for now
 b.	Add a new dimension: Country of Manufacture. It should be given on top of Stock Items.
 c.	Write script(s) and stored procedure(s) for the entire ETL from WWI db to DW.
 */
---Insert into city Staging Table
-Insert Into [WideWorldImportersDW].[Integration].[City_Staging]
-( [WWI City ID],[City],[State Province],[Country],[Continent],[Sales Territory],[Region]
-,[Subregion],[Location],[Latest Recorded Population], [Valid From],[Valid To])
 
-select c.CityID,c.CityName,sp.StateProvinceName,co.CountryName,co.Continent, sp.SalesTerritory,
-co.Region, co.Subregion, c.[Location], ISNULL(c.LatestRecordedPopulation,0), CURRENT_TIMESTAMP Validfrom,
-DateADD (Day, 7, CURRENT_TIMESTAMP) Validto
-from WideWorldImporters.[Application].Cities c
-join WideWorldImporters.[Application].StateProvinces sp on c.StateProvinceID = sp.StateProvinceID
-join WideWorldImporters.[Application].Countries co on sp.CountryID = co.CountryID
-
---insert into customer staging-- Declare table variable utilizing the newly created type - MemoryType
-DROP TYPE [dbo].[MemoryType]
-CREATE TYPE [dbo].[MemoryType]  
-    AS TABLE  
-    (  
-	[Customer Staging Key] [int] PRIMARY KEY NONCLUSTERED,
-	[WWI Customer ID] [int] NOT NULL,
-	[Customer] [nvarchar](100) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Bill To Customer] [nvarchar](100) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Category] [nvarchar](50) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Buying Group] [nvarchar](50) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Primary Contact] [nvarchar](50) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Postal Code] [nvarchar](10) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Valid From] [datetime2](7) NOT NULL,
-	[Valid To] [datetime2](7) NOT NULL
-    )  
-    WITH  
-        (MEMORY_OPTIMIZED = ON);  
-GO
-
-DECLARE @InMem dbo.MemoryType;
--- Populate table variable
-INSERT into @InMem select cus.CustomerID, cus.CustomerID, cus.CustomerName, cus2.CustomerName BilltoCustomer, cat.CustomerCategoryName, bg.BuyingGroupName,p.FullName, cus.PostalPostalCode,CURRENT_TIMESTAMP Validfrom, DateADD (Day, 7, CURRENT_TIMESTAMP) Validtofrom [WideWorldImporters].[Sales].Customers cusjoin [WideWorldImporters].[Sales].CustomerCategories cat on cus.CustomerCategoryID = cat.CustomerCategoryIDjoin [WideWorldImporters].[Application].People p on p.PersonID = cus.PrimaryContactPersonIDjoin [WideWorldImporters].[Sales].BuyingGroups bg on cus.BuyingGroupID = bg.BuyingGroupIDjoin [WideWorldImporters].[Sales].Customers cus2 on cus2.CustomerID =cus.BillToCustomerID;
-
--- Populate the destination memory-optimized table
-INSERT into [WideWorldImportersDW].[Integration].[Customer_Staging](	[WWI Customer ID],[Customer],[Bill To Customer],[Category],[Buying Group],[Primary Contact],[Postal Code],[Valid From],[Valid To]) 		SELECT [WWI Customer ID],[Customer],[Bill To Customer],[Category],[Buying Group],[Primary Contact],	[Postal Code],[Valid From],[Valid To] FROM @InMem;
-GO --Employee StagingDROP TYPE [dbo].[MemoryType]CREATE TYPE [dbo].[MemoryType]  
-    AS TABLE  
-    (  
-	[Employee Staging Key] [int] PRIMARY KEY NONCLUSTERED,
-	[WWI Employee ID] [int] NOT NULL,
-	[Employee] [nvarchar](50) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Preferred Name] [nvarchar](50) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Is Salesperson] [bit] NOT NULL,
-	[Photo] [varbinary](max) NULL,
-	[Valid From] [datetime2](7) NOT NULL,
-	[Valid To] [datetime2](7) NOT NULL
-    )  
-    WITH  
-        (MEMORY_OPTIMIZED = ON);  
-GO
-
-DECLARE @InMem dbo.MemoryType;INSERT into @InMem select p.PersonID, p.PersonID,p.FullName,p.PreferredName,p.IsSalesperson,NULL,CURRENT_TIMESTAMP Validfrom,
-DateADD (Day, 7, CURRENT_TIMESTAMP) Validto from WideWorldImporters.[Application].People pInsert Into [WideWorldImportersDW].[Integration].[Employee_Staging]
-([WWI Employee ID],[Employee],[Preferred Name],[Is Salesperson],[Valid From],[Valid To])
-SELECT [WWI Employee ID],[Employee],[Preferred Name],[Is Salesperson],[Valid From],[Valid To] FROM @InMem
------------------------------------------------------------------------------------------------------------------------------------
---stockitem staging
-DROP TYPE [dbo].[MemoryType]CREATE TYPE [dbo].[MemoryType]  
-    AS TABLE  
-    (  
-	[Stock Item Staging Key] [int] PRIMARY KEY NONCLUSTERED,
-	[WWI Stock Item ID] [int] NOT NULL,
-	[Stock Item] [nvarchar](100) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Color] [nvarchar](20) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Selling Package] [nvarchar](50) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Buying Package] [nvarchar](50) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Brand] [nvarchar](50) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Size] [nvarchar](20) COLLATE Latin1_General_100_CI_AS NOT NULL,
-	[Lead Time Days] [int] NOT NULL,
-	[Quantity Per Outer] [int] NOT NULL,
-	[Is Chiller Stock] [bit] NOT NULL,
-	[Barcode] [nvarchar](50) COLLATE Latin1_General_100_CI_AS NULL,
-	[Tax Rate] [decimal](18, 3) NOT NULL,
-	[Unit Price] [decimal](18, 2) NOT NULL,
-	[Recommended Retail Price] [decimal](18, 2) NULL,
-	[Typical Weight Per Unit] [decimal](18, 3) NOT NULL,
-	[Photo] [varbinary](max) NULL,
-	[Valid From] [datetime2](7) NOT NULL,
-	[Valid To] [datetime2](7) NOT NULL
-    )  
-    WITH  
-        (MEMORY_OPTIMIZED = ON);  
-GO
-
-DECLARE @InMem dbo.MemoryType;
-INSERT into @InMem select a.StockItemID, a.StockItemID, a.StockItemName, d.ColorName, b.PackageTypeName, c.PackageTypeName, isnull (a.Brand,''), isnull (a.Size,''),a.LeadTimeDays,a.QuantityPerOuter, a.IsChillerStock, a.Barcode, a.TaxRate, a.UnitPrice,a.RecommendedRetailPrice, a.TypicalWeightPerUnit,a.Photo, CURRENT_TIMESTAMP Validfrom,
-DateADD (Day, 7, CURRENT_TIMESTAMP) Validtofrom [WideWorldImporters].[Warehouse].StockItems a inner join [WideWorldImporters].[Warehouse].PackageTypes b on a.UnitPackageID = b.PackageTypeIDinner join [WideWorldImporters].[Warehouse].PackageTypes c on a.OuterPackageID = c.PackageTypeIDinner join [WideWorldImporters].[Warehouse].Colors d on a.ColorID = d.ColorID
-
-Insert Into [WideWorldImportersDW].[Integration].[StockItem_Staging]([WWI Stock Item ID],[Stock Item],[Color],[Selling Package],[Buying Package],[Brand],[Size],[Lead Time Days] ,[Quantity Per Outer],[Is Chiller Stock],[Barcode],[Tax Rate],[Unit Price],[Recommended Retail Price],[Typical Weight Per Unit],[Photo],[Valid From],[Valid To])select [WWI Stock Item ID],[Stock Item],[Color],[Selling Package],[Buying Package],[Brand],[Size],[Lead Time Days] ,[Quantity Per Outer],[Is Chiller Stock],[Barcode],[Tax Rate],[Unit Price],[Recommended Retail Price],[Typical Weight Per Unit],[Photo],[Valid From],[Valid To] FROM @InMem
-
+------------------------Start Intergration----------------------------
 --order staging
 DROP TYPE [dbo].[MemoryType]
+
+Delete from [Integration].Order_Staging
 CREATE TYPE [dbo].[MemoryType]  
     AS TABLE  
     (  
@@ -164,8 +75,11 @@ select [WWI City ID],[WWI Customer ID],[WWI Stock Item ID],[Order Date Key],[Pic
 ,[Package],[Quantity],[Unit Price],[Tax Rate],[Total Excluding Tax]
 ,[Tax Amount],[Total Including Tax] from @InMem
 
-GO;
+--select *from [WideWorldImportersDW].[Integration].Order_Staging 
+--delete from [WideWorldImportersDW].[Integration].Order_Staging 
 ------------------------END of Intergration Now all in DW table-----------------------------------
+
+
 --update intergation to match the key
 --match city key
 UPDATE [WideWorldImportersDW].[Integration].Order_Staging
@@ -194,8 +108,9 @@ SET [WideWorldImportersDW].[Integration].Order_Staging.[Picker Key] = e.[Employe
 FROM [WideWorldImportersDW].[Integration].Order_Staging os
 INNER JOIN [WideWorldImportersDW].Dimension.Employee e
 ON e.[WWI Employee ID] = os.[WWI Picker ID];
+GO
 
---
+--Insert into fact table
 Insert Into WideWorldImportersDW.Fact.[Order]([City Key],[Customer Key],[Stock Item Key]
 ,[Order Date Key],[Picked Date Key],[Salesperson Key],[Picker Key],[WWI Order ID],[WWI Backorder ID]
 ,[Description],[Package],[Quantity],[Unit Price],[Tax Rate],[Total Excluding Tax],[Tax Amount],[Total Including Tax],[Lineage Key])
@@ -206,8 +121,4 @@ select [City Key],0 [Customer Key],[Stock Item Key],[Order Date Key],[Picked Dat
 from Integration.Order_Staging 
 
 --clear table
-delete from Integration.City_Staging
-delete from Integration.Customer_Staging
-delete from Integration.Employee_Staging
-delete from Integration.StockItem_Staging
-delete from Integration.Order_Staging
+delete from [Integration].Order_Staging
