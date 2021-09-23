@@ -12,6 +12,7 @@ c.	Write script(s) and stored procedure(s) for the entire ETL from WWI db to DW.
 
 ------------------------Start Intergration----------------------------
 --order staging
+USE WideWorldImportersDW
 DROP TYPE [dbo].[MemoryType]
 
 Delete from [Integration].Order_Staging
@@ -48,13 +49,17 @@ CREATE TYPE [dbo].[MemoryType]
         (MEMORY_OPTIMIZED = ON);  
 GO
 
+-----------------------------------------------------------------------
+CREATE Procedure Order_staging
+AS
 DECLARE @InMem dbo.MemoryType;
 INSERT into @InMem ([Order Staging Key],[WWI City ID],[WWI Customer ID],[WWI Stock Item ID],[Order Date Key],[Picked Date Key]
 ,[WWI Salesperson ID],[WWI Picker ID],[WWI Order ID],[Description]
 ,[Package],[Quantity],[Unit Price],[Tax Rate],[Total Excluding Tax]
 ,[Tax Amount],[Total Including Tax])
 
-select ROW_NUMBER() OVER(ORDER BY o.OrderID ASC), ci.CityID, o.CustomerID, si.StockItemID,  o.OrderDate, CONVERT(date, ol.PickingCompletedWhen) PickupDate, 
+select ROW_NUMBER() OVER(ORDER BY o.OrderID ASC), ci.CityID, o.CustomerID, si.StockItemID,  
+o.OrderDate, CONVERT(date, ol.PickingCompletedWhen) PickupDate, 
 o.SalespersonPersonID, o.PickedByPersonID,
 o.OrderID, ol.[Description], 'Each' Package, ol.Quantity,ol.UnitPrice,ol.TaxRate,
 (ol.Quantity*ol.UnitPrice) TotalExcludingTax, (ol.Quantity*ol.UnitPrice)*(ol.TaxRate/100) TaxAmount, 
@@ -78,7 +83,6 @@ select [WWI City ID],[WWI Customer ID],[WWI Stock Item ID],[Order Date Key],[Pic
 --select *from [WideWorldImportersDW].[Integration].Order_Staging 
 --delete from [WideWorldImportersDW].[Integration].Order_Staging 
 ------------------------END of Intergration Now all in DW table-----------------------------------
-
 
 --update intergation to match the key
 --match city key
@@ -109,16 +113,21 @@ FROM [WideWorldImportersDW].[Integration].Order_Staging os
 INNER JOIN [WideWorldImportersDW].Dimension.Employee e
 ON e.[WWI Employee ID] = os.[WWI Picker ID];
 GO
+------------------------End Procedure 1---------------------------------
 
---Insert into fact table
+-----------------------------------------------------------------------
+CREATE Procedure Order_Fact_Input
+AS
 Insert Into WideWorldImportersDW.Fact.[Order]([City Key],[Customer Key],[Stock Item Key]
 ,[Order Date Key],[Picked Date Key],[Salesperson Key],[Picker Key],[WWI Order ID],[WWI Backorder ID]
 ,[Description],[Package],[Quantity],[Unit Price],[Tax Rate],[Total Excluding Tax],[Tax Amount],[Total Including Tax],[Lineage Key])
-
 select [City Key],0 [Customer Key],[Stock Item Key],[Order Date Key],[Picked Date Key],
 [Salesperson Key],[Picker Key],[WWI Order ID],[WWI Backorder ID],[Description],[Package],[Quantity],[Unit Price],[Tax Rate],
 [Total Excluding Tax],[Tax Amount],[Total Including Tax], 0 [Lineage Key]
 from Integration.Order_Staging 
-
---clear table
 delete from [Integration].Order_Staging
+-----------------------------------------------------------------------
+
+--Run ExEC
+EXEC Order_staging
+EXEC Order_Fact_Input
